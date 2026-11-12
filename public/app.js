@@ -353,7 +353,7 @@
     return `<small>Gemini verdict${l ? ` · <span class="mono">${esc(l.id)}</span>` : ''}</small><div class="score"><div class="ring" style="--p:${score}"><div>${ai ? score : 'AI'}</div></div><div><b>${ai ? esc(ACTION_TEXT[ai.action] || ai.action) : st ? 'Analysed on arrival' : 'Loading…'}</b><br><small>Facts checked against PayPal</small></div></div>`;
   }
   // PayPal status codes in activity text read better as words: WAITING_FOR_BUYER_RESPONSE -> waiting for buyer response
-  const humanize = (t) => String(t || '').replace(/[A-Z]{2,}(?:_[A-Z]+)+/g, (m) => m.replace(/_/g, ' ').toLowerCase());
+  const humanize = (t) => String(t || '').replace(/\b[A-Z]{2,}(?:_[A-Z]+)+\b/g, (m) => m.replace(/_/g, ' ').toLowerCase());
   const toastIcon = (k) => (k === 'ai' ? I.ai : k === 'success' ? I.check : I.bolt);
   function heroToast(st, i = 0) {
     const list = (st && st.recent) || [];

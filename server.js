@@ -479,8 +479,14 @@ function computeStats() {
   const subs = store.allSubmissions();
   const payments = store.listPayments().filter((p) => p.captureId);
   const timed = analyses.filter((a) => a.latencyMs);
-  const latest = [...cases].sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0))[0] || null;
-  const latestAi = latest ? store.getAnalysis(latest.id) : null;
+  const newest = [...cases].sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
+  // /api/stats is open (the landing page reads it), so cases go out without buyer details.
+  const publicCase = (x) => {
+    const a = store.getAnalysis(x.id);
+    return { id: x.id, reasonLabel: x.reasonLabel, amount: x.amount, status: x.status, stage: x.stage, createdAt: x.createdAt, dueDate: x.dueDate, outcome: x.outcome ? { code: x.outcome.code } : null, ai: a ? { action: a.recommended_action, score: a.strength_score } : null };
+  };
+  const now = Date.now();
+  const due = open.filter((x) => x.dueDate && Date.parse(x.dueDate) > now).sort((a, b) => Date.parse(a.dueDate) - Date.parse(b.dueDate))[0] || null;
   return {
     currency: (cases[0] && cases[0].amount && cases[0].amount.currency) || c.store.currency,
     cases: cases.length,
@@ -498,7 +504,9 @@ function computeStats() {
     messages: subs.filter((x) => x.kind === 'message').length,
     payments: payments.length,
     volume: Math.round(payments.reduce((t, p) => t + (p.amount || 0), 0) * 100) / 100,
-    latest: latest ? { ...latest, ai: latestAi ? { action: latestAi.recommended_action, score: latestAi.strength_score } : null } : null,
+    latest: newest[0] ? publicCase(newest[0]) : null,
+    queue: newest.slice(0, 4).map(publicCase),
+    nextDue: due ? { id: due.id, dueDate: due.dueDate, amount: due.amount, reasonLabel: due.reasonLabel } : null,
     recent: store.recentActivity(30).filter((a) => a.kind !== 'warn').slice(0, 6).map((a) => ({ text: a.text, at: a.at, kind: a.kind })),
     database: store.status().backend,
     updatedAt: new Date().toISOString()

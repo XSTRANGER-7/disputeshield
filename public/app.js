@@ -174,7 +174,7 @@
     [/^#\/settings$/, 'settings']
   ];
   const APP_PAGES = ['dashboard', 'disputes', 'case', 'payments', 'settings', 'notfound'];
-  const SECTION_ANCHORS = ['#how', '#features', '#apis', '#faq'];
+  const SECTION_ANCHORS = ['#live', '#how', '#features', '#apis', '#faq'];
 
   function parseRoute() {
     const h = window.location.hash || '#/';
@@ -188,6 +188,7 @@
 
   function render() {
     const prev = state.route.name;
+    stopHeroFX();
     state.route = parseRoute();
     const r = state.route;
     if (state.grid && r.name !== 'disputes') { try { state.grid.destroy(); } catch { /* ignore */ } state.grid = null; }
@@ -326,16 +327,143 @@
   }
 
   // ---------- landing ----------
+  // PayPal's own dispute reason codes (lib/normalize.js maps every one of them).
+  const HERO_WORDS = ['Item not received', 'Not as described', 'Unauthorised payment', 'Duplicate charge', 'Refund not processed', 'Incorrect amount', 'Cancelled subscription'];
+  const orbitNode = (icon, cls, deg) => `<span class="node ${cls}" style="--a:${deg}deg"><i>${icon}</i></span>`;
+  function heroRows(st) {
+    if (!st) return Array.from({ length: 4 }, () => '<div class="wr sk-row"><span class="sk s-dot"></span><span class="sk s-line"></span><span class="sk s-amt"></span></div>').join('');
+    if (!st.queue || !st.queue.length) return `<div class="wr-empty">${I.check}No disputes yet. New ones land here the moment PayPal sends them.</div>`;
+    return st.queue.map((d, i) => {
+      const si = statusInfo(d);
+      return `<a class="wr" href="#/disputes/${encodeURIComponent(d.id)}" tabindex="-1" style="--i:${i}"><span class="st ${si.cls}"></span><span class="wr-main"><b>${esc(d.reasonLabel)}</b><small class="mono">${esc(d.id)}</small></span><span class="wr-amt">${esc(money(d.amount.value, d.amount.currency))}</span><span class="pill ${si.cls}">${esc(si.label)}</span></a>`;
+    }).join('');
+  }
+  function heroFoot(st) {
+    if (!st) return '<span class="sk s-foot"></span>';
+    const cur = st.currency;
+    const seg = (n, cls, label) => (n ? `<i class="${cls}" style="flex:${n}" title="${n} ${label}"></i>` : '');
+    const total = st.won + st.refunded + st.open + (st.cancelled || 0);
+    return `<div class="split">${total ? seg(st.won, 'won', 'won') + seg(st.refunded, 'lost', 'refunded') + seg(st.open, 'open', 'open') + seg(st.cancelled, 'neutral', 'cancelled') : '<i class="neutral" style="flex:1"></i>'}</div>
+      <div class="nums"><div><small>At risk</small><b>${esc(money(st.atRisk, cur))}</b></div><div><small>Kept</small><b>${esc(money(st.kept, cur))}</b></div><div><small>Win rate</small><b>${st.winRate == null ? '—' : `${st.winRate}%`}</b></div></div>`;
+  }
+  function heroVerdict(st) {
+    const l = st && st.latest;
+    const ai = l && l.ai;
+    const score = ai ? Math.max(0, Math.min(100, Number(ai.score) || 0)) : 0;
+    return `<small>Gemini verdict${l ? ` · <span class="mono">${esc(l.id)}</span>` : ''}</small><div class="score"><div class="ring" style="--p:${score}"><div>${ai ? score : 'AI'}</div></div><div><b>${ai ? esc(ACTION_TEXT[ai.action] || ai.action) : st ? 'Analysed on arrival' : 'Loading…'}</b><br><small>Facts checked against PayPal</small></div></div>`;
+  }
+  const toastIcon = (k) => (k === 'ai' ? I.ai : k === 'success' ? I.check : I.bolt);
+  function heroToast(st, i = 0) {
+    const list = (st && st.recent) || [];
+    if (!st) return '<span class="tt"><b>Loading…</b></span>';
+    if (!list.length) return `<span class="ti">${I.bolt}</span><span class="tt"><b>Watching PayPal for new disputes</b><small>webhooks + a check every minute</small></span>`;
+    const a = list[i % list.length];
+    return `<span class="ti ${esc(a.kind)}">${toastIcon(a.kind)}</span><span class="tt"><b>${esc(a.text)}</b><small>${esc(relTime(a.at))}</small></span>`;
+  }
+  function heroDue(st) {
+    if (!st) return `<span class="ic">${I.clock}</span><span class="dl"><small>Respond-by tracker</small><b>Loading…</b></span>`;
+    const n = st.nextDue;
+    if (!n) return `<span class="ic">${I.clock}</span><span class="dl"><small>Respond-by tracker</small><b>Nothing due right now</b></span>`;
+    return `<span class="ic">${I.clock}</span><span class="dl"><small>Next reply due · ${esc(money(n.amount.value, n.amount.currency))}</small><b class="cd" data-due="${esc(n.dueDate)}">${esc(countdown(n.dueDate))}</b></span>`;
+  }
+  function countdown(iso) {
+    const ms = Date.parse(iso) - Date.now();
+    if (!(ms > 0)) return 'due now';
+    const s = Math.floor(ms / 1000);
+    const d = Math.floor(s / 86400);
+    const hms = [Math.floor((s % 86400) / 3600), Math.floor((s % 3600) / 60), s % 60].map((v) => String(v).padStart(2, '0')).join(':');
+    return d ? `${d}d ${hms}` : hms;
+  }
+
+  // Hero effects: rotating reason, live activity toast, countdown, cursor spotlight, tilt and magnetic buttons.
+  // Everything is torn down by stopHeroFX() when the route changes.
+  let heroOff = null;
+  let heroToastAt = 0;
+  function stopHeroFX() { if (heroOff) { heroOff(); heroOff = null; } }
+  function initHeroFX() {
+    stopHeroFX();
+    const landing = $('.landing');
+    const stage = $('#stage');
+    const bg = $('.hero-bg');
+    if (!landing || !stage || !bg) return;
+    const timers = [];
+    const offs = [];
+    const on = (el, ev, fn, opt) => { el.addEventListener(ev, fn, opt); offs.push(() => el.removeEventListener(ev, fn, opt)); };
+
+    // live countdown to the next PayPal respond-by date
+    timers.push(setInterval(() => { const el = $('#heroDue .cd'); if (el) el.textContent = countdown(el.dataset.due); }, 1000));
+
+    // rotating reason pill: its width follows the word
+    const rot = $('#heroRot');
+    const words = rot ? $$('.w', rot) : [];
+    let wi = 0;
+    const fit = () => { if (rot && words[wi]) rot.style.width = `${words[wi].offsetWidth}px`; };
+    fit();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit).catch(() => {});
+    on(window, 'resize', fit, { passive: true });
+    if (!reduceMotion && words.length > 1) {
+      timers.push(setInterval(() => {
+        if (document.hidden) return;
+        const cur = words[wi];
+        wi = (wi + 1) % words.length;
+        const nx = words[wi];
+        cur.classList.remove('in'); cur.classList.add('out');
+        nx.classList.remove('out'); nx.classList.add('in');
+        fit();
+        setTimeout(() => cur.classList.remove('out'), 520);
+      }, 2400));
+    }
+
+    // live activity toast cycles through the real activity log
+    if (!reduceMotion) {
+      timers.push(setInterval(() => {
+        const box = $('#heroToast');
+        const list = (state.stats && state.stats.recent) || [];
+        if (!box || document.hidden || list.length < 2) return;
+        heroToastAt = (heroToastAt + 1) % list.length;
+        box.classList.add('out');
+        setTimeout(() => { box.innerHTML = heroToast(state.stats, heroToastAt); box.classList.remove('out'); }, 300);
+      }, 4200));
+    }
+
+    // fresh numbers every minute while the page is open (webhooks push sooner, see onRemoteChange)
+    timers.push(setInterval(() => { if (!document.hidden) loadStats().then(updateLandingLive).catch(() => {}); }, 60_000));
+
+    const fine = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (fine && !reduceMotion) {
+      let tx = 0; let ty = 0; let cx = 0; let cy = 0; let raf = 0;
+      const step = () => {
+        cx += (tx - cx) * 0.1; cy += (ty - cy) * 0.1;
+        stage.style.setProperty('--px', cx.toFixed(4));
+        stage.style.setProperty('--py', cy.toFixed(4));
+        raf = Math.abs(tx - cx) + Math.abs(ty - cy) > 0.002 ? requestAnimationFrame(step) : 0;
+      };
+      const kick = () => { if (!raf) raf = requestAnimationFrame(step); };
+      on(window, 'pointermove', (e) => {
+        const r = bg.getBoundingClientRect();
+        if (e.clientY > r.bottom || e.clientY < r.top) { if (tx || ty) { tx = 0; ty = 0; kick(); } bg.classList.remove('lit'); return; }
+        bg.classList.add('lit');
+        bg.style.setProperty('--mx', `${Math.round(e.clientX - r.left)}px`);
+        bg.style.setProperty('--my', `${Math.round(e.clientY - r.top)}px`);
+        const s = stage.getBoundingClientRect();
+        tx = Math.max(-1, Math.min(1, (e.clientX - (s.left + s.width / 2)) / (s.width / 1.4)));
+        ty = Math.max(-1, Math.min(1, (e.clientY - (s.top + s.height / 2)) / (s.height / 1.4)));
+        kick();
+      }, { passive: true });
+      on(document.documentElement, 'pointerleave', () => { tx = 0; ty = 0; kick(); bg.classList.remove('lit'); });
+      $$('.magnet', landing).forEach((b) => {
+        on(b, 'pointermove', (e) => { const r = b.getBoundingClientRect(); b.style.translate = `${(((e.clientX - r.left) / r.width) - 0.5) * 14}px ${(((e.clientY - r.top) / r.height) - 0.5) * 10}px`; });
+        on(b, 'pointerleave', () => { b.style.translate = ''; });
+      });
+      offs.push(() => { if (raf) cancelAnimationFrame(raf); });
+    }
+    heroOff = () => { timers.forEach(clearInterval); offs.forEach((f) => f()); };
+  }
+
   function renderLanding() {
     const c = state.config;
-    const list = state.disputes || [];
-    const open = list.filter(isOpen);
-    const atRisk = open.reduce((s, d) => s + d.amount.value, 0);
-    const cur = (list[0] && list[0].amount.currency) || c.currency;
-    const latest = open[0] || list[0];
-    const sample = latest
-      ? { id: latest.id, amount: money(latest.amount.value, latest.amount.currency), reason: latest.reasonLabel, status: statusInfo(latest), real: true, score: latest.ai ? latest.ai.score : null, action: latest.ai ? latest.ai.action : null }
-      : { id: 'Example case', amount: money(89, cur), reason: 'Item not received', status: { label: 'Needs response', cls: 'respond' }, real: false, score: null, action: null };
+    const st = state.stats;
+    const host = window.location.host || 'disputeshield';
     const marquee = ['PayPal Disputes API', 'Orders v2', 'Payments v2', 'Transaction Search', 'Webhooks', 'Google Gemini', 'AG Grid', 'Render', 'Evidence PDF', 'Human approval'];
     const mq = [...marquee, ...marquee].map((m) => `<span class="item"><span class="star">✦</span>${esc(m)}</span>`).join('');
     const signedIn = !c.authRequired || c.authed;
@@ -353,14 +481,16 @@
           <div class="right"><a class="btn btn-ink" href="#/dashboard">${signedIn ? 'Open dashboard' : 'Sign in'} <span class="arrow">→</span></a></div>
         </header>
 
+        <div class="hero-bg" aria-hidden="true"><div class="grid"></div><div class="grid hi"></div><div class="spot"></div></div>
         <section class="wrap hero">
-          <div>
-            <div class="live reveal"><span class="badge">${c.paypalConfigured ? `PayPal ${isSandbox() ? 'sandbox' : 'live'}` : 'Setup needed'}</span><span id="liveLine">Loading live numbers…</span></div>
+          <div class="hero-copy">
+            <a class="live reveal" href="#live" data-scroll="live"><span class="badge"><i class="ping"></i>${c.paypalConfigured ? `PayPal ${isSandbox() ? 'sandbox' : 'live'}` : 'Setup needed'}</span><span id="liveLine">Loading live numbers…</span><span class="chev" aria-hidden="true">→</span></a>
             <h1 class="reveal">Win the PayPal disputes <span class="soft">you should</span> <span class="hl">never lose.</span></h1>
+            <p class="rotline reveal"><span>Handles every PayPal reason:</span> <span class="rot" id="heroRot">${HERO_WORDS.map((w, i) => `<span class="w${i ? '' : ' in'}">${esc(w)}</span>`).join('')}</span></p>
             <p class="lead reveal">DisputeShield reads every dispute on your PayPal account, builds the case from PayPal's own record of the payment, lets Gemini draft the response, and sends it with an evidence PDF after one click from you.</p>
             <div class="ctas reveal">
-              <a class="btn btn-ink btn-lg" href="#/dashboard">Open your dispute queue <span class="arrow">→</span></a>
-              <button class="btn btn-white btn-lg" data-scroll="how">See how it works</button>
+              <a class="btn btn-ink btn-lg magnet shine" href="#/dashboard">Open your dispute queue <span class="arrow">→</span></a>
+              <button class="btn btn-white btn-lg magnet" data-scroll="how">See how it works</button>
             </div>
             <div class="proof reveal">
               <div><b id="proofCases">—</b><span>disputes handled</span></div>
@@ -368,22 +498,25 @@
               <div><b id="proofKept">—</b><span>money kept</span></div>
             </div>
           </div>
-          <div class="stage reveal" aria-hidden="true">
-            <div class="disc"></div>
-            <span class="sparkle s1">${SPARKLE}</span><span class="sparkle s2">${SPARKLE}</span><span class="sparkle s3">${SPARKLE}</span>
-            <div class="float-card fc-case">
-              <div class="row"><span class="eyebrow">${sample.real ? 'Latest dispute' : 'Example'}</span><span class="pill ${sample.status.cls}">${esc(sample.status.label)}</span></div>
-              <div class="amt">${esc(sample.amount)}</div>
-              <div class="muted small">${esc(sample.reason)} · <span class="mono">${esc(sample.id)}</span></div>
-              <div class="bar-mini"><i></i></div>
+          <div class="stage reveal" id="stage" aria-hidden="true">
+            <div class="stage-3d">
+              <div class="disc"></div>
+              <div class="orbit o1">${orbitNode(I.paypal, 'pp', 20)}${orbitNode(I.ai, 'gm', 200)}</div>
+              <div class="orbit o2">${orbitNode(I.bolt, 'wh', 75)}${orbitNode(I.file, 'pdf', 195)}${orbitNode(I.shield, 'sh', 315)}</div>
+              <span class="sparkle s1">${SPARKLE}</span><span class="sparkle s2">${SPARKLE}</span><span class="sparkle s3">${SPARKLE}</span>
+              <div class="layer win float-card">
+                <div class="win-bar"><i></i><i></i><i></i><span class="url">${esc(host)}/#/disputes</span></div>
+                <div class="win-body">
+                  <div class="win-head"><b>Dispute queue</b><span class="win-live"><span class="dot good pulse"></span>Live from PayPal</span></div>
+                  <div class="win-rows" id="winRows">${heroRows(st)}</div>
+                  <div class="win-foot" id="winFoot">${heroFoot(st)}</div>
+                  <div class="scan"></div>
+                </div>
+              </div>
+              <div class="layer float-card fc-toast"><div class="toast-head"><span class="ping"></span>Live activity</div><div class="toast-body" id="heroToast">${heroToast(st)}</div></div>
+              <div class="layer float-card fc-verdict beam" id="heroVerdict">${heroVerdict(st)}</div>
+              <div class="layer float-card fc-chip fc-deadline" id="heroDue">${heroDue(st)}</div>
             </div>
-            <div class="float-card fc-verdict">
-              <small>Gemini verdict</small>
-              <div class="score"><div class="ring"><div>${sample.score != null ? Number(sample.score) : 'AI'}</div></div><div><b>${esc(sample.action ? ACTION_TEXT[sample.action] : 'Analysed on arrival')}</b><br><small>Facts checked against PayPal</small></div></div>
-            </div>
-            <div class="float-card fc-chip fc-hook"><span class="ic">${I.bolt}</span>New dispute, analysed</div>
-            <div class="float-card fc-chip fc-pdf"><span class="ic">${I.file}</span>Evidence PDF sent to PayPal</div>
-            <div class="float-card fc-chip fc-deadline"><span class="ic">${I.clock}</span>Respond-by tracked</div>
           </div>
         </section>
 
@@ -467,7 +600,9 @@
           <footer class="lfoot"><span>DisputeShield · built on PayPal REST APIs and Google Gemini · an independent tool, not made by PayPal</span><span>MIT licensed</span></footer>
         </section>
       </div>`;
+    [['#winRows', heroRows(st)], ['#winFoot', heroFoot(st)], ['#heroVerdict', heroVerdict(st)], ['#heroDue', heroDue(st)]].forEach(([sel, html]) => { const el = $(sel); if (el) el.dataset.sig = html; });
     animateIn($('#root'));
+    initHeroFX();
     if (state.stats) updateLandingLive();
     loadStats().then(() => { if (state.route.name === 'landing') updateLandingLive(); }).catch(() => { const l = $('#liveLine'); if (l) l.textContent = 'Live numbers are unavailable right now'; });
   }
@@ -501,14 +636,14 @@
     if (feed) feed.innerHTML = st.recent.length ? st.recent.map((a) => `<li><span class="fi ${esc(a.kind)}">${a.kind === 'ai' ? I.ai : a.kind === 'success' ? I.check : a.kind === 'warn' ? I.alert : I.clock}</span><div><b class="fw4">${esc(a.text)}</b><time>${esc(relTime(a.at))}</time></div></li>`).join('') : '<li class="muted small">No activity yet.</li>';
     const note = $('#lsNote');
     if (note) note.textContent = `Every case here is a real PayPal ${isSandbox() ? 'sandbox ' : ''}dispute, read from PayPal's API and kept in ${st.database === 'supabase' ? 'Supabase' : 'the local database'}.`;
-    const latest = st.latest;
-    const fc = $('.fc-case');
-    if (latest && fc) {
-      const si = statusInfo(latest);
-      fc.innerHTML = `<div class="row"><span class="eyebrow">Latest dispute</span><span class="pill ${si.cls}">${esc(si.label)}</span></div><div class="amt">${esc(money(latest.amount.value, latest.amount.currency))}</div><div class="muted small">${esc(latest.reasonLabel)} · <span class="mono">${esc(latest.id)}</span></div><div class="bar-mini"><i></i></div>`;
-      const fv = $('.fc-verdict');
-      if (fv && latest.ai) fv.innerHTML = `<small>Gemini verdict</small><div class="score"><div class="ring"><div>${Number(latest.ai.score)}</div></div><div><b>${esc(ACTION_TEXT[latest.ai.action])}</b><br><small>Facts checked against PayPal</small></div></div>`;
-    }
+    // hero stage: only touch what changed, so nothing flickers on a refresh
+    const patch = (sel, html) => { const el = $(sel); if (el && el.dataset.sig !== html) { el.innerHTML = html; el.dataset.sig = html; } };
+    patch('#winRows', heroRows(st));
+    patch('#winFoot', heroFoot(st));
+    patch('#heroVerdict', heroVerdict(st));
+    patch('#heroDue', heroDue(st));
+    const toast = $('#heroToast');
+    if (toast) { if (heroToastAt >= (st.recent || []).length) heroToastAt = 0; toast.innerHTML = heroToast(st, heroToastAt); }
   }
 
   // ---------- login / setup ----------
@@ -1245,6 +1380,7 @@
   function onRemoteChange(id) {
     clearTimeout(reloadTimer);
     reloadTimer = setTimeout(async () => {
+      if (state.route.name === 'landing') { if (id) loadStats().then(updateLandingLive).catch(() => {}); return; }
       if (anyBusy() || !APP_PAGES.includes(state.route.name)) return;
       state.syncing = true; renderSync();
       try { await Promise.all([loadDisputes(), loadActivity(), loadPayments()]); } catch { state.syncing = false; renderSync(); return; }

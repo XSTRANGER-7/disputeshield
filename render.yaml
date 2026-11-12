@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: disputeshield
+    runtime: node
+    plan: free
+    buildCommand: "echo 'No dependencies to install'"
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+      - key: STORE_NAME
+        value: Northwind Goods
+      - key: STORE_CURRENCY
+        value: USD
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false

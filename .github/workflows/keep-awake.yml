@@ -1,0 +1,18 @@
+# Backup keep-awake for free hosting: pings the deployed app every 10 minutes so a free Render
+# instance never sleeps. Set a repository variable APP_URL (Settings > Secrets and variables >
+# Actions > Variables), for example https://disputeshield.onrender.com. Without it, the job skips.
+# GitHub may delay scheduled runs by a few minutes; the app also pings itself, so this is only a backup.
+name: Keep the app awake
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    if: ${{ vars.APP_URL != '' }}
+    steps:
+      - name: Ping /api/health
+        run: curl -fsS --retry 3 --retry-delay 20 --max-time 90 "${{ vars.APP_URL }}/api/health"

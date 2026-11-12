@@ -1,0 +1,13 @@
+# secrets and local data (never commit)
+.env
+.env.*
+!.env.example
+data/
+*.bak
+*.tmp
+
+# tooling
+node_modules/
+logs/
+*.log
+.DS_Store

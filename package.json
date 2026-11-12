@@ -1,0 +1,25 @@
+{
+  "name": "disputeshield",
+  "version": "1.0.0",
+  "description": "AI dispute defence for PayPal merchants: reads PayPal disputes, builds the evidence case with Google Gemini, and submits it after merchant approval.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "keywords": [
+    "paypal",
+    "disputes",
+    "chargebacks",
+    "ai",
+    "gemini",
+    "ag-grid",
+    "hackathon"
+  ],
+  "license": "MIT",
+  "dependencies": {}
+}

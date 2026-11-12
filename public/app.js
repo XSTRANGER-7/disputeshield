@@ -352,13 +352,15 @@
     const score = ai ? Math.max(0, Math.min(100, Number(ai.score) || 0)) : 0;
     return `<small>Gemini verdict${l ? ` · <span class="mono">${esc(l.id)}</span>` : ''}</small><div class="score"><div class="ring" style="--p:${score}"><div>${ai ? score : 'AI'}</div></div><div><b>${ai ? esc(ACTION_TEXT[ai.action] || ai.action) : st ? 'Analysed on arrival' : 'Loading…'}</b><br><small>Facts checked against PayPal</small></div></div>`;
   }
+  // PayPal status codes in activity text read better as words: WAITING_FOR_BUYER_RESPONSE -> waiting for buyer response
+  const humanize = (t) => String(t || '').replace(/[A-Z]{2,}(?:_[A-Z]+)+/g, (m) => m.replace(/_/g, ' ').toLowerCase());
   const toastIcon = (k) => (k === 'ai' ? I.ai : k === 'success' ? I.check : I.bolt);
   function heroToast(st, i = 0) {
     const list = (st && st.recent) || [];
     if (!st) return '<span class="tt"><b>Loading…</b></span>';
     if (!list.length) return `<span class="ti">${I.bolt}</span><span class="tt"><b>Watching PayPal for new disputes</b><small>webhooks + a check every minute</small></span>`;
     const a = list[i % list.length];
-    return `<span class="ti ${esc(a.kind)}">${toastIcon(a.kind)}</span><span class="tt"><b>${esc(a.text)}</b><small>${esc(relTime(a.at))}</small></span>`;
+    return `<span class="ti ${esc(a.kind)}">${toastIcon(a.kind)}</span><span class="tt"><b>${esc(humanize(a.text))}</b><small>${esc(relTime(a.at))}</small></span>`;
   }
   function heroDue(st) {
     if (!st) return `<span class="ic">${I.clock}</span><span class="dl"><small>Respond-by tracker</small><b>Loading…</b></span>`;
@@ -633,7 +635,7 @@
     const sp = $('#lsSpeed'); if (sp) sp.textContent = st.avgAiSeconds == null ? '—' : `${st.avgAiSeconds}s`;
     const up = $('#lsUpdated'); if (up) up.textContent = `${st.database === 'supabase' ? 'Supabase' : 'Local database'} · updated ${relTime(st.updatedAt)}`;
     const feed = $('#lsFeed');
-    if (feed) feed.innerHTML = st.recent.length ? st.recent.map((a) => `<li><span class="fi ${esc(a.kind)}">${a.kind === 'ai' ? I.ai : a.kind === 'success' ? I.check : a.kind === 'warn' ? I.alert : I.clock}</span><div><b class="fw4">${esc(a.text)}</b><time>${esc(relTime(a.at))}</time></div></li>`).join('') : '<li class="muted small">No activity yet.</li>';
+    if (feed) feed.innerHTML = st.recent.length ? st.recent.map((a) => `<li><span class="fi ${esc(a.kind)}">${a.kind === 'ai' ? I.ai : a.kind === 'success' ? I.check : a.kind === 'warn' ? I.alert : I.clock}</span><div><b class="fw4">${esc(humanize(a.text))}</b><time>${esc(relTime(a.at))}</time></div></li>`).join('') : '<li class="muted small">No activity yet.</li>';
     const note = $('#lsNote');
     if (note) note.textContent = `Every case here is a real PayPal ${isSandbox() ? 'sandbox ' : ''}dispute, read from PayPal's API and kept in ${st.database === 'supabase' ? 'Supabase' : 'the local database'}.`;
     // hero stage: only touch what changed, so nothing flickers on a refresh

@@ -28,7 +28,7 @@ A light, responsive interface (desktop, tablet and phone) with a product tour an
 
 | Page | Route | What it shows |
 | --- | --- | --- |
-| Product tour | `#/` | Hero with live numbers from your PayPal account, how it works, features, FAQ |
+| Product tour | `#/` | Hero with a live mini queue (newest cases, at risk, kept, win rate), activity, the latest Gemini verdict and a respond-by countdown; live numbers, how it works, features, FAQ |
 | Overview | `#/dashboard` | Money at risk, deadlines, disputes by reason, money disputed over 14 days, AI strength per case, recent activity and payments |
 | Disputes | `#/disputes` | AG Grid queue with status filters and search |
 | Case | `#/disputes/{id}` | Buyer's claim, PayPal's payment record, your fulfilment facts, Gemini's verdict, respond, sandbox controls, activity |

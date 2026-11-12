@@ -57,12 +57,12 @@ The queue syncs on its own (PayPal webhooks plus server-sent events, and a one-m
 
 ## AI used
 
-**Google Gemini** through the Generative Language REST API (`generateContent`) with `responseMimeType: application/json`, a strict `responseSchema` (enums for the action and evidence type) and temperature 0.2. Default model `gemini-3.5-flash`; if it is busy (503/429), timed out or retired (404), the server tries the next model in `GEMINI_FALLBACK_MODELS` (default `gemini-3.5-flash-lite`, `gemini-flash-latest`) and shows which model answered. The system prompt forbids inventing facts, separates PayPal-verified facts from merchant-entered ones, and asks for the exact facts used. Output is validated and clamped on the server (enums, score 0 to 100, 2,000-character notes) before it is stored or shown. If Gemini fails, the merchant sees the error; there is no canned fallback.
+**Google Gemini** through the Generative Language REST API (`generateContent`) with `responseMimeType: application/json`, a strict `responseSchema` (enums for the action and evidence type) and temperature 0.2. Default model `gemini-3.5-flash`; if it is busy (503/429), timed out or retired (404), the server tries the next model in `GEMINI_FALLBACK_MODELS` (default chain `gemini-3.6-flash`, `gemini-3.1-flash-lite`, `gemini-3-flash-preview`, `gemini-3.5-flash-lite`, `gemini-flash-latest`; a busy model rests for 60 seconds and the last model that worked is tried first) and shows which model answered. The system prompt forbids inventing facts, separates PayPal-verified facts from merchant-entered ones, and asks for the exact facts used. Output is validated and clamped on the server (enums, score 0 to 100, 2,000-character notes) before it is stored or shown. If Gemini fails, the merchant sees the error; there is no canned fallback.
 
 ## Sponsor tools
 
-- **AG Grid Community** powers the dispute queue (sorting, quick filter, custom cell renderers, theming API). If the CDN cannot load, the same rows render as a plain table.
-- **Render** hosts it as a single web service (`render.yaml` included).
+- **AG Grid Community** powers the dispute queue: column sorting, custom cell renderers (buyer and case id, amount, status pill, respond-by, Gemini score bar and verdict), stable row ids for live updates, row click to open a case, and the theming API (`themeQuartz`) to match the app. The status tabs and search set the grid's rows. If the CDN cannot load, the same rows render as a plain table.
+- **Render** hosts it as a single web service (`render.yaml` included) with a built-in keep-awake ping, so the free instance does not sleep.
 
 ## Run it locally
 

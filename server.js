@@ -505,7 +505,7 @@ function computeStats() {
     payments: payments.length,
     volume: Math.round(payments.reduce((t, p) => t + (p.amount || 0), 0) * 100) / 100,
     latest: newest[0] ? publicCase(newest[0]) : null,
-    queue: newest.slice(0, 4).map(publicCase),
+    queue: newest.slice(0, 3).map(publicCase),
     nextDue: due ? { id: due.id, dueDate: due.dueDate, amount: due.amount, reasonLabel: due.reasonLabel } : null,
     recent: store.recentActivity(30).filter((a) => a.kind !== 'warn').slice(0, 6).map((a) => ({ text: a.text, at: a.at, kind: a.kind })),
     database: store.status().backend,

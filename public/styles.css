@@ -351,6 +351,7 @@ textarea.input { height: auto; padding: 12px 14px; resize: vertical; line-height
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
 .section-head h4 { font-size: 15.5px; font-weight: 500; display: flex; align-items: center; gap: 10px; }
 .section-head h4 .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: var(--lime); font-size: 12px; font-weight: 700; }
+.quote .q-label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 4px; font-style: normal; }
 .quote { margin: 0 0 8px; padding: 12px 16px; background: var(--surface-2); border-left: 3px solid var(--lime-2); border-radius: 0 14px 14px 0; color: var(--ink-2); }
 .kv { display: grid; grid-template-columns: 150px 1fr; gap: 9px 14px; font-size: 13.5px; margin: 0; }
 .kv dt { color: var(--muted); }

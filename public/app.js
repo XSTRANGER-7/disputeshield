@@ -976,7 +976,7 @@
         <div class="stack">
           <section class="card section">
             <div class="section-head"><h4><span class="n">1</span>The buyer's claim</h4><span class="muted small">${esc(d.channel ? d.channel.toLowerCase() : '')}</span></div>
-            ${buyerMsgs.length ? buyerMsgs.map((m) => `<p class="quote">“${esc(m.text)}”</p>`).join('') : `<p class="muted m0">PayPal reason: ${esc(d.reasonLabel)}. The buyer left no message.</p>`}
+            ${(() => { const notes = d.items.map((i) => i.notes).filter((t) => t && t.trim().length > 2); const msgs = buyerMsgs.filter((m) => m.text && m.text.trim().length > 2); const quotes = [...notes.map((t) => `<p class="quote"><span class="q-label">Buyer's note to PayPal</span>“${esc(t)}”</p>`), ...msgs.map((m) => `<p class="quote">“${esc(m.text)}”</p>`)]; return quotes.length ? quotes.join('') : `<p class="muted m0">PayPal reason: ${esc(d.reasonLabel)}. The buyer left no message.</p>`; })()}
             <dl class="kv mt12">
               <dt>Seller transaction</dt><dd class="mono">${esc(d.transactionId || 'Not provided')}</dd>
               ${d.items.length ? `<dt>Disputed items</dt><dd>${esc(d.items.map((i) => i.name).join(', '))}</dd>` : ''}
